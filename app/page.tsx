@@ -1,7 +1,7 @@
 import { CollecteHero } from "@/components/dashboard/CollecteHero";
 import { EncaissementsChart } from "@/components/dashboard/EncaissementsChart";
 import { ModesPaiement, PaiementsRecents, PresenceDuJour, ProgressionClasses, Relances } from "@/components/dashboard/Cartes";
-import { Panel } from "@/components/ui";
+import { Panel } from "@/components/elements";
 import { CLASSES, ELEVES, ECOLE } from "@/lib/data";
 import { dateLongue } from "@/lib/format";
 

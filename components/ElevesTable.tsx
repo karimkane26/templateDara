@@ -1,52 +1,263 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CLASSES, ELEVES, classeDe, resteAPayer, type StatutPaiement } from "@/lib/data";
+/*
+ * Tableau des élèves, avec une recherche et deux filtres (classe, statut de la mensualité).
+ */
+
+import { useEffect, useState, type ChangeEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { CLASSES, ELEVES, MOT_DE_PASSE_PARENT, classeDe, resteAPayer, type Eleve } from "@/lib/data";
 import { fcfa, initiales } from "@/lib/format";
+import { chiffresSeulement, lireEleves, supprimerEleve } from "@/lib/stockage";
+import { AjoutEleve } from "./AjoutEleve";
 import { Icon } from "./Icon";
-import { Avatar, StatutBadge } from "./ui";
+import { Avatar, StatutBadge } from "./elements";
 
-const champ =
-  "h-10 rounded-lg border border-line bg-surface px-3 text-sm focus:border-primary focus:outline-none";
+const CHAMP = "h-10 rounded-lg border border-line bg-surface px-3 text-sm focus:border-primary focus:outline-none";
 
-export function ElevesTable({ rechercheInitiale = "" }: { rechercheInitiale?: string }) {
-  const [q, setQ] = useState(rechercheInitiale);
+interface ElevesTableProps {
+  rechercheInitiale?: string;
+}
+
+/** Vrai si l'élève correspond à la recherche et aux filtres choisis. */
+function eleveCorrespond(eleve: Eleve, recherche: string, classe: string, statut: string): boolean {
+  if (classe !== "toutes" && eleve.classeId !== classe) {
+    return false;
+  }
+  if (statut !== "tous" && eleve.statutMois !== statut) {
+    return false;
+  }
+
+  const texteCherche = recherche.trim().toLowerCase();
+  if (texteCherche === "") {
+    return true;
+  }
+
+  // On cherche dans le prénom, le nom, le parent, le matricule et le téléphone.
+  const texteDeLEleve = (
+    eleve.prenom + " " + eleve.nom + " " + eleve.parent + " " + eleve.matricule + " " + eleve.telephoneParent
+  ).toLowerCase();
+
+  return texteDeLEleve.includes(texteCherche);
+}
+
+export function ElevesTable(props: ElevesTableProps) {
+  let rechercheDeDepart = "";
+  if (props.rechercheInitiale) {
+    rechercheDeDepart = props.rechercheInitiale;
+  }
+
+  const [recherche, setRecherche] = useState(rechercheDeDepart);
   const [classe, setClasse] = useState("toutes");
-  const [statut, setStatut] = useState<"tous" | StatutPaiement>("tous");
+  const [statut, setStatut] = useState("tous");
 
-  const liste = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    return ELEVES.filter((e) => {
-      if (classe !== "toutes" && e.classeId !== classe) return false;
-      if (statut !== "tous" && e.statutMois !== statut) return false;
-      if (!t) return true;
-      return [e.prenom, e.nom, e.parent, e.matricule, e.telephoneParent].join(" ").toLowerCase().includes(t);
-    });
-  }, [q, classe, statut]);
+  // La liste des élèves (relue dans le navigateur, car l'administrateur peut en ajouter)
+  const [eleves, setEleves] = useState<Eleve[]>(ELEVES);
+  const [ajoutOuvert, setAjoutOuvert] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(function () {
+    setEleves(lireEleves());
+  }, []);
+
+  function ouvrirAjout() {
+    setMessage("");
+    setAjoutOuvert(true);
+  }
+
+  function fermerAjout() {
+    setAjoutOuvert(false);
+  }
+
+  function quandUnEleveEstAjoute(eleve: Eleve) {
+    setEleves(lireEleves());
+    setAjoutOuvert(false);
+    setMessage(
+      eleve.prenom + " " + eleve.nom + " a été inscrit (" + eleve.matricule + "). Le parent peut se connecter avec l'identifiant " +
+        chiffresSeulement(eleve.telephoneParent) + " et le mot de passe " + MOT_DE_PASSE_PARENT + ".",
+    );
+  }
+
+  function supprimer(eleve: Eleve) {
+    if (!window.confirm("Retirer " + eleve.prenom + " " + eleve.nom + " de la liste des élèves ?")) {
+      return;
+    }
+    supprimerEleve(eleve.id);
+    setEleves(lireEleves());
+    setMessage(eleve.prenom + " " + eleve.nom + " a été retiré de la liste.");
+  }
+
+  function quandOnTapeLaRecherche(evenement: ChangeEvent<HTMLInputElement>) {
+    setRecherche(evenement.target.value);
+  }
+
+  function quandOnChoisitLaClasse(evenement: ChangeEvent<HTMLSelectElement>) {
+    setClasse(evenement.target.value);
+  }
+
+  function quandOnChoisitLeStatut(evenement: ChangeEvent<HTMLSelectElement>) {
+    setStatut(evenement.target.value);
+  }
+
+  // 1. On garde seulement les élèves qui correspondent aux filtres.
+  const elevesAffiches: Eleve[] = [];
+  for (let i = 0; i < eleves.length; i++) {
+    if (eleveCorrespond(eleves[i], recherche, classe, statut)) {
+      elevesAffiches.push(eleves[i]);
+    }
+  }
+
+  // 2. On fabrique la liste des classes pour le menu déroulant.
+  const optionsClasses = [];
+  for (let i = 0; i < CLASSES.length; i++) {
+    optionsClasses.push(
+      <option key={CLASSES[i].id} value={CLASSES[i].id}>
+        Classe {CLASSES[i].nom}
+      </option>,
+    );
+  }
+
+  // 3. On fabrique une ligne de tableau par élève.
+  const lignes = [];
+  for (let i = 0; i < elevesAffiches.length; i++) {
+    const eleve = elevesAffiches[i];
+    const classeDeLEleve = classeDe(eleve);
+
+    // Colonne "Progression"
+    let progression = null;
+    if (eleve.hizbActuel === 0) {
+      progression = <span className="text-muted">Lecture</span>;
+    } else {
+      const largeurBarre = (eleve.hizbActuel / 60) * 100 + "%";
+      progression = (
+        <span className="inline-flex items-center gap-2">
+          <span className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-2">
+            <span className="block h-full rounded-full bg-primary" style={{ width: largeurBarre }} />
+          </span>
+          <span className="tabular-nums">Hizb {eleve.hizbActuel}</span>
+        </span>
+      );
+    }
+
+    // Présence en rouge si elle est en dessous de 85 %
+    let stylePresence = "";
+    if (eleve.tauxPresence < 85) {
+      stylePresence = "font-semibold text-danger";
+    }
+
+    // "reste ..." sous le badge si l'élève n'a pas tout payé
+    let reste = null;
+    if (eleve.statutMois !== "paye") {
+      reste = <p className="mt-1 text-xs text-muted tabular-nums">reste {fcfa(resteAPayer(eleve))}</p>;
+    }
+
+    lignes.push(
+      <tr key={eleve.id} className="hover:bg-surface-2/60">
+        <td className="px-5 py-3">
+          <div className="flex items-center gap-3">
+            <Avatar texte={initiales(eleve.prenom, eleve.nom)} sexe={eleve.sexe} />
+            <div className="min-w-0">
+              <p className="font-semibold">
+                {eleve.prenom} {eleve.nom}
+              </p>
+              <p className="text-xs text-muted tabular-nums">{eleve.matricule}</p>
+            </div>
+          </div>
+        </td>
+        <td className="px-3 py-3 whitespace-nowrap">{classeDeLEleve.nom}</td>
+        <td className="px-3 py-3 whitespace-nowrap">{progression}</td>
+        <td className={"px-3 py-3 text-right tabular-nums " + stylePresence}>{eleve.tauxPresence} %</td>
+        <td className="px-3 py-3">
+          <p className="whitespace-nowrap">{eleve.parent}</p>
+          <p className="text-xs whitespace-nowrap text-muted tabular-nums">{eleve.telephoneParent}</p>
+        </td>
+        <td className="px-3 py-3 text-right">
+          <StatutBadge statut={eleve.statutMois} />
+          {reste}
+        </td>
+        <td className="px-5 py-3 text-right">
+          <button
+            type="button"
+            onClick={function () {
+              supprimer(eleve);
+            }}
+            aria-label={"Retirer " + eleve.prenom + " " + eleve.nom}
+            className="inline-grid size-9 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger"
+          >
+            <Icon name="trash" size={16} />
+          </button>
+        </td>
+      </tr>,
+    );
+  }
+
+  // Message si aucun élève ne correspond
+  let messageVide = null;
+  if (elevesAffiches.length === 0) {
+    messageVide = (
+      <p className="px-5 py-10 text-center text-sm text-muted">
+        Aucun élève ne correspond à ces filtres. Essayez un autre nom ou choisissez « Toutes les classes ».
+      </p>
+    );
+  }
+
+  // "1 élève affiché" ou "12 élèves affichés"
+  let texteCompteur = elevesAffiches.length + " élève affiché sur " + eleves.length;
+  if (elevesAffiches.length > 1) {
+    texteCompteur = elevesAffiches.length + " élèves affichés sur " + eleves.length;
+  }
+
+  let bandeau = null;
+  if (message !== "") {
+    bandeau = (
+      <div role="status" className="flex items-center gap-3 rounded-xl bg-primary-soft px-4 py-3 text-sm font-medium text-primary">
+        <Icon name="check" />
+        <span className="flex-1">{message}</span>
+      </div>
+    );
+  }
 
   return (
+    <div className="flex flex-col gap-5">
+      <div className="flex justify-end">
+        <Button type="button" size="lg" onClick={ouvrirAjout}>
+          <Icon name="plus" />
+          Ajouter un élève
+        </Button>
+      </div>
+
+      {bandeau}
+
+      <AjoutEleve ouvert={ajoutOuvert} onFermer={fermerAjout} onAjoute={quandUnEleveEstAjoute} />
+
     <section className="panel min-w-0">
       <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
         <div className="relative min-w-[200px] flex-1">
-          <label htmlFor="filtre-eleve" className="sr-only">Rechercher</label>
+          <label htmlFor="filtre-eleve" className="sr-only">
+            Rechercher
+          </label>
           <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
           <input
             id="filtre-eleve"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+            value={recherche}
+            onChange={quandOnTapeLaRecherche}
             placeholder="Nom, parent, matricule ou téléphone"
-            className={`${champ} w-full pl-10`}
+            className={CHAMP + " w-full pl-10"}
           />
         </div>
-        <label htmlFor="filtre-classe" className="sr-only">Classe</label>
-        <select id="filtre-classe" value={classe} onChange={(e) => setClasse(e.target.value)} className={champ}>
+
+        <label htmlFor="filtre-classe" className="sr-only">
+          Classe
+        </label>
+        <select id="filtre-classe" value={classe} onChange={quandOnChoisitLaClasse} className={CHAMP}>
           <option value="toutes">Toutes les classes</option>
-          {CLASSES.map((c) => (
-            <option key={c.id} value={c.id}>Classe {c.nom}</option>
-          ))}
+          {optionsClasses}
         </select>
-        <label htmlFor="filtre-statut" className="sr-only">Mensualité</label>
-        <select id="filtre-statut" value={statut} onChange={(e) => setStatut(e.target.value as typeof statut)} className={champ}>
+
+        <label htmlFor="filtre-statut" className="sr-only">
+          Mensualité
+        </label>
+        <select id="filtre-statut" value={statut} onChange={quandOnChoisitLeStatut} className={CHAMP}>
           <option value="tous">Toutes les mensualités</option>
           <option value="paye">Payé</option>
           <option value="partiel">Partiel</option>
@@ -63,59 +274,19 @@ export function ElevesTable({ rechercheInitiale = "" }: { rechercheInitiale?: st
               <th className="px-3 py-3 font-medium">Progression</th>
               <th className="px-3 py-3 text-right font-medium">Présence</th>
               <th className="px-3 py-3 font-medium">Parent</th>
-              <th className="px-5 py-3 text-right font-medium">Octobre</th>
+              <th className="px-3 py-3 text-right font-medium">Octobre</th>
+              <th className="px-5 py-3 text-right font-medium">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-line">
-            {liste.map((e) => {
-              const c = classeDe(e);
-              return (
-                <tr key={e.id} className="hover:bg-surface-2/60">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar texte={initiales(e.prenom, e.nom)} sexe={e.sexe} />
-                      <div className="min-w-0">
-                        <p className="font-semibold">{e.prenom} {e.nom}</p>
-                        <p className="text-xs text-muted tabular-nums">{e.matricule}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">{c.nom}</td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    {e.hizbActuel === 0 ? (
-                      <span className="text-muted">Lecture</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-2">
-                          <span className="block h-full rounded-full bg-primary" style={{ width: `${(e.hizbActuel / 60) * 100}%` }} />
-                        </span>
-                        <span className="tabular-nums">Hizb {e.hizbActuel}</span>
-                      </span>
-                    )}
-                  </td>
-                  <td className={`px-3 py-3 text-right tabular-nums ${e.tauxPresence < 85 ? "font-semibold text-danger" : ""}`}>{e.tauxPresence} %</td>
-                  <td className="px-3 py-3">
-                    <p className="whitespace-nowrap">{e.parent}</p>
-                    <p className="text-xs whitespace-nowrap text-muted tabular-nums">{e.telephoneParent}</p>
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <StatutBadge statut={e.statutMois} />
-                    {e.statutMois !== "paye" && <p className="mt-1 text-xs text-muted tabular-nums">reste {fcfa(resteAPayer(e))}</p>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
+          <tbody className="divide-y divide-line">{lignes}</tbody>
         </table>
-        {liste.length === 0 && (
-          <p className="px-5 py-10 text-center text-sm text-muted">
-            Aucun élève ne correspond à ces filtres. Essayez un autre nom ou choisissez « Toutes les classes ».
-          </p>
-        )}
+        {messageVide}
       </div>
-      <p className="border-t border-line px-5 py-3 text-xs text-muted">
-        {liste.length} élève{liste.length > 1 ? "s" : ""} affiché{liste.length > 1 ? "s" : ""} sur {ELEVES.length}
-      </p>
+
+      <p className="border-t border-line px-5 py-3 text-xs text-muted">{texteCompteur}</p>
     </section>
+    </div>
   );
 }
