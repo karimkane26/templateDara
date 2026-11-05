@@ -11,9 +11,18 @@ import { fcfa, initiales } from "@/lib/format";
 import { chiffresSeulement, lireEleves, supprimerEleve } from "@/lib/stockage";
 import { AjoutEleve } from "./AjoutEleve";
 import { Icon } from "./Icon";
+import { ListeDeChoix, type OptionDeChoix } from "./ListeDeChoix";
 import { Avatar, StatutBadge } from "./elements";
 
 const CHAMP = "h-10 rounded-lg border border-line bg-surface px-3 text-sm focus:border-primary focus:outline-none";
+
+// Les choix du filtre "Mensualité"
+const OPTIONS_STATUT: OptionDeChoix[] = [
+  { valeur: "tous", texte: "Toutes les mensualités" },
+  { valeur: "paye", texte: "Payé" },
+  { valeur: "partiel", texte: "Partiel" },
+  { valeur: "impaye", texte: "Impayé" },
+];
 
 interface ElevesTableProps {
   rechercheInitiale?: string;
@@ -54,6 +63,8 @@ export function ElevesTable(props: ElevesTableProps) {
   // La liste des élèves (relue dans le navigateur, car l'administrateur peut en ajouter)
   const [eleves, setEleves] = useState<Eleve[]>(ELEVES);
   const [ajoutOuvert, setAjoutOuvert] = useState(false);
+  // L'élève qu'on modifie (null = on ajoute un nouvel élève)
+  const [eleveEnModification, setEleveEnModification] = useState<Eleve | null>(null);
   const [message, setMessage] = useState("");
 
   useEffect(function () {
@@ -62,7 +73,20 @@ export function ElevesTable(props: ElevesTableProps) {
 
   function ouvrirAjout() {
     setMessage("");
+    setEleveEnModification(null);
     setAjoutOuvert(true);
+  }
+
+  function ouvrirModification(eleve: Eleve) {
+    setMessage("");
+    setEleveEnModification(eleve);
+    setAjoutOuvert(true);
+  }
+
+  function quandUnEleveEstModifie(eleve: Eleve) {
+    setEleves(lireEleves());
+    setAjoutOuvert(false);
+    setMessage("La fiche de " + eleve.prenom + " " + eleve.nom + " (" + eleve.matricule + ") a été modifiée.");
   }
 
   function fermerAjout() {
@@ -74,7 +98,7 @@ export function ElevesTable(props: ElevesTableProps) {
     setAjoutOuvert(false);
     setMessage(
       eleve.prenom + " " + eleve.nom + " a été inscrit (" + eleve.matricule + "). Le parent peut se connecter avec l'identifiant " +
-        chiffresSeulement(eleve.telephoneParent) + " et le mot de passe " + MOT_DE_PASSE_PARENT + ".",
+        chiffresSeulement(eleve.telephoneParent) + " et son mot de passe (par défaut " + MOT_DE_PASSE_PARENT + ").",
     );
   }
 
@@ -91,14 +115,6 @@ export function ElevesTable(props: ElevesTableProps) {
     setRecherche(evenement.target.value);
   }
 
-  function quandOnChoisitLaClasse(evenement: ChangeEvent<HTMLSelectElement>) {
-    setClasse(evenement.target.value);
-  }
-
-  function quandOnChoisitLeStatut(evenement: ChangeEvent<HTMLSelectElement>) {
-    setStatut(evenement.target.value);
-  }
-
   // 1. On garde seulement les élèves qui correspondent aux filtres.
   const elevesAffiches: Eleve[] = [];
   for (let i = 0; i < eleves.length; i++) {
@@ -108,13 +124,9 @@ export function ElevesTable(props: ElevesTableProps) {
   }
 
   // 2. On fabrique la liste des classes pour le menu déroulant.
-  const optionsClasses = [];
+  const optionsClasses: OptionDeChoix[] = [{ valeur: "toutes", texte: "Toutes les classes" }];
   for (let i = 0; i < CLASSES.length; i++) {
-    optionsClasses.push(
-      <option key={CLASSES[i].id} value={CLASSES[i].id}>
-        Classe {CLASSES[i].nom}
-      </option>,
-    );
+    optionsClasses.push({ valeur: CLASSES[i].id, texte: "Classe " + CLASSES[i].nom });
   }
 
   // 3. On fabrique une ligne de tableau par élève.
@@ -175,7 +187,17 @@ export function ElevesTable(props: ElevesTableProps) {
           <StatutBadge statut={eleve.statutMois} />
           {reste}
         </td>
-        <td className="px-5 py-3 text-right">
+        <td className="px-5 py-3 text-right whitespace-nowrap">
+          <button
+            type="button"
+            onClick={function () {
+              ouvrirModification(eleve);
+            }}
+            aria-label={"Modifier " + eleve.prenom + " " + eleve.nom}
+            className="inline-grid size-9 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink"
+          >
+            <Icon name="edit" size={16} />
+          </button>
           <button
             type="button"
             onClick={function () {
@@ -228,7 +250,13 @@ export function ElevesTable(props: ElevesTableProps) {
 
       {bandeau}
 
-      <AjoutEleve ouvert={ajoutOuvert} onFermer={fermerAjout} onAjoute={quandUnEleveEstAjoute} />
+      <AjoutEleve
+        ouvert={ajoutOuvert}
+        eleve={eleveEnModification}
+        onFermer={fermerAjout}
+        onAjoute={quandUnEleveEstAjoute}
+        onModifie={quandUnEleveEstModifie}
+      />
 
     <section className="panel min-w-0">
       <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
@@ -246,23 +274,8 @@ export function ElevesTable(props: ElevesTableProps) {
           />
         </div>
 
-        <label htmlFor="filtre-classe" className="sr-only">
-          Classe
-        </label>
-        <select id="filtre-classe" value={classe} onChange={quandOnChoisitLaClasse} className={CHAMP}>
-          <option value="toutes">Toutes les classes</option>
-          {optionsClasses}
-        </select>
-
-        <label htmlFor="filtre-statut" className="sr-only">
-          Mensualité
-        </label>
-        <select id="filtre-statut" value={statut} onChange={quandOnChoisitLeStatut} className={CHAMP}>
-          <option value="tous">Toutes les mensualités</option>
-          <option value="paye">Payé</option>
-          <option value="partiel">Partiel</option>
-          <option value="impaye">Impayé</option>
-        </select>
+        <ListeDeChoix id="filtre-classe" label="Classe" value={classe} onChange={setClasse} options={optionsClasses} className="w-48" />
+        <ListeDeChoix id="filtre-statut" label="Mensualité" value={statut} onChange={setStatut} options={OPTIONS_STATUT} className="w-52" />
       </div>
 
       <div className="overflow-x-auto">

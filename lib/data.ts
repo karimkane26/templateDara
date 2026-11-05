@@ -68,6 +68,79 @@ export interface Enseignant {
   classeIds: string[]; // classes dont il s'occupe
   identifiant: string; // pour se connecter
   motDePasse: string;
+  actif?: boolean; // false = compte désactivé par l'administrateur (absent = actif)
+}
+
+/**
+ * Un parent d'élève. Il est relié à ses enfants par son numéro de téléphone :
+ * tous les élèves dont "telephoneParent" est ce numéro sont ses enfants.
+ */
+export interface Parent {
+  id: string;
+  prenom: string;
+  nom: string;
+  telephone: string; // format "77 412 35 08", sert d'identifiant de connexion
+  email: string;
+  adresse: string;
+  motDePasse: string;
+  actif: boolean; // false = le parent ne peut plus se connecter
+}
+
+/** Un enseignement (une matière) : Mémorisation, Tajwid, Langue arabe... */
+export interface Enseignement {
+  id: string;
+  nom: string;
+  description: string;
+}
+
+// Qui voit une annonce
+export type PublicAnnonce = "tous" | "enseignants" | "parents";
+
+/** Une annonce publiée par l'administration. */
+export interface Annonce {
+  id: string;
+  titre: string;
+  contenu: string;
+  date: string; // "2026-10-26"
+  public: PublicAnnonce;
+  importante: boolean; // affichée en couleur
+}
+
+/* ---------- Gestion financière ---------- */
+
+/** Frais d'inscription (nouvel élève) ou de réinscription, une fois par année scolaire. */
+export interface Inscription {
+  id: string;
+  eleveId: string;
+  annee: string; // "2026–2027"
+  type: "inscription" | "reinscription";
+  montant: number; // FCFA à payer
+  montantPaye: number; // FCFA déjà versés
+  datePaiement: string; // "2026-10-03", ou "" si pas encore payé
+  mode: ModePaiement;
+}
+
+/** Un salaire versé à un enseignant pour un mois. */
+export interface PaiementSalaire {
+  id: string;
+  enseignantId: string;
+  mois: string; // "2026-10" : le mois de travail payé
+  date: string; // jour du versement
+  montant: number;
+  mode: ModePaiement;
+  note: string;
+}
+
+export type CategorieDepense = "Loyer" | "Électricité et eau" | "Internet et abonnements" | "Fournitures" | "Communication" | "Entretien" | "Autre";
+
+/** Une dépense de l'école (loyer, électricité, fournitures...). */
+export interface Depense {
+  id: string;
+  date: string;
+  categorie: CategorieDepense;
+  libelle: string;
+  montant: number;
+  mode: ModePaiement;
 }
 
 // 1 = lundi, 2 = mardi ... 7 = dimanche
@@ -79,6 +152,7 @@ export interface Cours {
   titre: string;
   classeId: string; // id d'une classe, ou "toutes" pour tous les élèves
   enseignantId: string;
+  enseignementId?: string; // la matière enseignée (peut manquer sur les anciens cours)
   jour: JourSemaine;
   heureDebut: string; // "09:00"
   heureFin: string; // "10:30"
@@ -520,10 +594,78 @@ export const ENSEIGNANTS: Enseignant[] = [
 
 // Les liens Meet ci-dessous sont des exemples : l'administrateur doit les remplacer par de vrais liens.
 export const COURS: Cours[] = [
-  { id: "cours-1", titre: "Lecture et alphabet", classeId: "alif", enseignantId: "ens-1", jour: 1, heureDebut: "09:00", heureFin: "10:00", lienMeet: "https://meet.google.com/abc-defg-hij" },
-  { id: "cours-2", titre: "Lecture et alphabet", classeId: "alif", enseignantId: "ens-1", jour: 4, heureDebut: "09:00", heureFin: "10:00", lienMeet: "https://meet.google.com/abc-defg-hij" },
-  { id: "cours-3", titre: "Mémorisation, hizb 1 à 15", classeId: "ba", enseignantId: "ens-2", jour: 2, heureDebut: "09:00", heureFin: "10:30", lienMeet: "https://meet.google.com/kmn-pqrs-tuv" },
-  { id: "cours-4", titre: "Révision, hizb 16 à 40", classeId: "ta", enseignantId: "ens-3", jour: 3, heureDebut: "16:00", heureFin: "17:30", lienMeet: "https://meet.google.com/wxy-zabc-def" },
-  { id: "cours-5", titre: "Tajwid avancé", classeId: "tha", enseignantId: "ens-4", jour: 4, heureDebut: "16:00", heureFin: "17:30", lienMeet: "https://meet.google.com/ghi-jklm-nop" },
-  { id: "cours-6", titre: "Causerie du samedi (toute l'école)", classeId: "toutes", enseignantId: "ens-4", jour: 6, heureDebut: "10:00", heureFin: "11:00", lienMeet: "https://meet.google.com/qrs-tuvw-xyz" },
+  { id: "cours-1", titre: "Lecture et alphabet", classeId: "alif", enseignantId: "ens-1", enseignementId: "lecture", jour: 1, heureDebut: "09:00", heureFin: "10:00", lienMeet: "https://meet.google.com/abc-defg-hij" },
+  { id: "cours-2", titre: "Lecture et alphabet", classeId: "alif", enseignantId: "ens-1", enseignementId: "lecture", jour: 4, heureDebut: "09:00", heureFin: "10:00", lienMeet: "https://meet.google.com/abc-defg-hij" },
+  { id: "cours-3", titre: "Mémorisation, hizb 1 à 15", classeId: "ba", enseignantId: "ens-2", enseignementId: "memorisation", jour: 2, heureDebut: "09:00", heureFin: "10:30", lienMeet: "https://meet.google.com/kmn-pqrs-tuv" },
+  { id: "cours-4", titre: "Révision, hizb 16 à 40", classeId: "ta", enseignantId: "ens-3", enseignementId: "memorisation", jour: 3, heureDebut: "16:00", heureFin: "17:30", lienMeet: "https://meet.google.com/wxy-zabc-def" },
+  { id: "cours-5", titre: "Tajwid avancé", classeId: "tha", enseignantId: "ens-4", enseignementId: "tajwid", jour: 4, heureDebut: "16:00", heureFin: "17:30", lienMeet: "https://meet.google.com/ghi-jklm-nop" },
+  { id: "cours-6", titre: "Causerie du samedi (toute l'école)", classeId: "toutes", enseignantId: "ens-4", enseignementId: "education", jour: 6, heureDebut: "10:00", heureFin: "11:00", lienMeet: "https://meet.google.com/qrs-tuvw-xyz" },
+];
+
+/* ============================================================
+ * 10. Enseignements (matières) et annonces de départ
+ * ============================================================ */
+
+export const ENSEIGNEMENTS: Enseignement[] = [
+  { id: "lecture", nom: "Lecture et alphabet", description: "Apprendre les lettres arabes et lire le Coran (classe Alif)." },
+  { id: "memorisation", nom: "Mémorisation du Coran", description: "Apprentissage par cœur des hizb et révisions régulières." },
+  { id: "tajwid", nom: "Tajwid", description: "Les règles de récitation du Coran." },
+  { id: "arabe", nom: "Langue arabe", description: "Vocabulaire, grammaire et conversation." },
+  { id: "education", nom: "Éducation islamique", description: "Fiqh, sira du Prophète (PSL) et bonnes manières." },
+];
+
+export const ANNONCES: Annonce[] = [
+  {
+    id: "annonce-1",
+    titre: "Bienvenue sur l'espace en ligne",
+    contenu: "Les cours en ligne ont lieu sur Google Meet. Cliquez sur « Rejoindre sur Google Meet » à l'heure du cours. Pensez à activer votre micro et votre caméra.",
+    date: "2026-10-20",
+    public: "tous",
+    importante: false,
+  },
+  {
+    id: "annonce-2",
+    titre: "Réunion des parents samedi 31 octobre",
+    contenu: "Une réunion d'information aura lieu à 10 h à l'école, et en direct sur Google Meet pour ceux qui ne peuvent pas se déplacer.",
+    date: "2026-10-24",
+    public: "parents",
+    importante: true,
+  },
+];
+
+/* ============================================================
+ * 11. Gestion financière : valeurs de départ
+ * (l'administrateur peut tout modifier depuis la page Gestion financière)
+ * ============================================================ */
+
+// Frais payés une fois par année scolaire
+export const FRAIS_DE_DEPART = {
+  inscription: 10000, // nouvel élève
+  reinscription: 5000, // élève déjà inscrit l'année d'avant
+};
+
+// Salaire mensuel de chaque enseignant (FCFA)
+export const SALAIRES_DE_DEPART: { enseignantId: string; montant: number }[] = [
+  { enseignantId: "ens-1", montant: 75000 },
+  { enseignantId: "ens-2", montant: 80000 },
+  { enseignantId: "ens-3", montant: 80000 },
+  { enseignantId: "ens-4", montant: 100000 },
+];
+
+export const PAIEMENTS_SALAIRES: PaiementSalaire[] = [
+  { id: "sal-1", enseignantId: "ens-1", mois: "2026-09", date: "2026-09-30", montant: 75000, mode: "Wave", note: "" },
+  { id: "sal-2", enseignantId: "ens-2", mois: "2026-09", date: "2026-09-30", montant: 80000, mode: "Wave", note: "" },
+  { id: "sal-3", enseignantId: "ens-3", mois: "2026-09", date: "2026-09-30", montant: 80000, mode: "Orange Money", note: "" },
+  { id: "sal-4", enseignantId: "ens-4", mois: "2026-09", date: "2026-09-30", montant: 100000, mode: "Espèces", note: "" },
+  { id: "sal-5", enseignantId: "ens-2", mois: "2026-10", date: "2026-10-25", montant: 40000, mode: "Wave", note: "Avance sur salaire" },
+];
+
+export const DEPENSES: Depense[] = [
+  { id: "dep-1", date: "2026-09-01", categorie: "Loyer", libelle: "Loyer du local, septembre", montant: 150000, mode: "Wave" },
+  { id: "dep-2", date: "2026-09-12", categorie: "Électricité et eau", libelle: "Facture Senelec", montant: 23500, mode: "Orange Money" },
+  { id: "dep-3", date: "2026-10-01", categorie: "Loyer", libelle: "Loyer du local, octobre", montant: 150000, mode: "Wave" },
+  { id: "dep-4", date: "2026-10-05", categorie: "Internet et abonnements", libelle: "Box internet + Google Workspace", montant: 28000, mode: "Wave" },
+  { id: "dep-5", date: "2026-10-09", categorie: "Fournitures", libelle: "Corans, ardoises et cahiers", montant: 42000, mode: "Espèces" },
+  { id: "dep-6", date: "2026-10-14", categorie: "Électricité et eau", libelle: "Facture Senelec", montant: 21000, mode: "Orange Money" },
+  { id: "dep-7", date: "2026-10-20", categorie: "Communication", libelle: "Crédit téléphone pour les relances", montant: 5000, mode: "Espèces" },
 ];

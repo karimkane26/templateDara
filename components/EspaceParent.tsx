@@ -1,14 +1,28 @@
 "use client";
 
 /*
- * Espace du parent : ses enfants, leur prochain cours et l'emploi du temps
- * des cours en ligne (Google Meet) de leurs classes.
+ * Espace du parent : les annonces, ses enfants, leur prochain cours et l'emploi du temps
+ * de TOUS les cours en ligne (Google Meet), avec un filtre "Cours de mes enfants".
  */
 
 import { useEffect, useState } from "react";
-import { CLASSES, ECOLE, type Cours, type Eleve, type Enseignant } from "@/lib/data";
+import { CLASSES, ECOLE, type Annonce, type Cours, type Eleve, type Enseignant, type Enseignement } from "@/lib/data";
 import { fcfa, initiales, moisLong } from "@/lib/format";
-import { chiffresSeulement, lireCours, lireEleves, lireEnseignants, lireSession, type Session } from "@/lib/stockage";
+import {
+  annoncesPour,
+  chiffresSeulement,
+  enfantsDuParent,
+  lireCours,
+  lireEleves,
+  lireEnseignants,
+  lireEnseignements,
+  lireParents,
+  lireSession,
+  trouverParent,
+  trouverParentParTelephone,
+  type Session,
+} from "@/lib/stockage";
+import { ListeAnnonces } from "./Annonces";
 import { Avatar, StatutBadge } from "./elements";
 import { EmploiDuTemps, ProchainCours, nomDesEleves } from "./EmploiDuTemps";
 
@@ -24,8 +38,11 @@ function resteDeLEleve(eleve: Eleve, mensualite: number): number {
 export function EspaceParent() {
   const [session, setSession] = useState<Session | null>(null);
   const [enfants, setEnfants] = useState<Eleve[]>([]);
-  const [cours, setCours] = useState<Cours[]>([]);
+  const [tousLesCours, setTousLesCours] = useState<Cours[]>([]);
+  const [mesCours, setMesCours] = useState<Cours[]>([]);
   const [enseignants, setEnseignants] = useState<Enseignant[]>([]);
+  const [enseignements, setEnseignements] = useState<Enseignement[]>([]);
+  const [annonces, setAnnonces] = useState<Annonce[]>([]);
 
   useEffect(function () {
     const sessionLue = lireSession();
@@ -34,36 +51,49 @@ export function EspaceParent() {
       return;
     }
 
-    // 1. Les enfants : élèves dont le téléphone du parent est celui du compte
-    const tousLesEleves = lireEleves();
-    const mesEnfants: Eleve[] = [];
-    const mesClasses: string[] = [];
-    for (let i = 0; i < tousLesEleves.length; i++) {
-      if (chiffresSeulement(tousLesEleves[i].telephoneParent) === sessionLue.id) {
-        mesEnfants.push(tousLesEleves[i]);
-        mesClasses.push(tousLesEleves[i].classeId);
-      }
+    // 1. Ma fiche parent (les anciennes sessions gardaient le numéro de téléphone comme id)
+    const parents = lireParents();
+    let moi = trouverParent(parents, sessionLue.id);
+    if (moi === undefined) {
+      moi = trouverParentParTelephone(parents, chiffresSeulement(sessionLue.id));
     }
 
-    // 2. Les cours visibles : ceux de leurs classes, et ceux pour "toutes les classes"
-    const tousLesCours = lireCours();
-    const mesCours: Cours[] = [];
-    for (let i = 0; i < tousLesCours.length; i++) {
-      const c = tousLesCours[i];
+    // 2. Mes enfants : les élèves inscrits avec mon numéro de téléphone
+    let mesEnfants: Eleve[] = [];
+    if (moi !== undefined) {
+      mesEnfants = enfantsDuParent(moi, lireEleves());
+    }
+    const mesClasses: string[] = [];
+    for (let i = 0; i < mesEnfants.length; i++) {
+      mesClasses.push(mesEnfants[i].classeId);
+    }
+
+    // 3. Tous les cours sont visibles ; "mes cours" = ceux des classes de mes enfants et ceux pour toute l'école
+    const cours = lireCours();
+    const coursDeMesEnfants: Cours[] = [];
+    for (let i = 0; i < cours.length; i++) {
+      const c = cours[i];
       if (c.classeId === "toutes" || mesClasses.includes(c.classeId)) {
-        mesCours.push(c);
+        coursDeMesEnfants.push(c);
       }
     }
 
     setEnfants(mesEnfants);
-    setCours(mesCours);
+    setTousLesCours(cours);
+    setMesCours(coursDeMesEnfants);
     setEnseignants(lireEnseignants());
+    setEnseignements(lireEnseignements());
+    setAnnonces(annoncesPour("parent"));
   }, []);
 
   if (session === null) {
     return null;
   }
 
+  const mesCoursIds: string[] = [];
+  for (let i = 0; i < mesCours.length; i++) {
+    mesCoursIds.push(mesCours[i].id);
+  }
   // Une carte par enfant
   const cartes = [];
   for (let i = 0; i < enfants.length; i++) {
@@ -130,7 +160,9 @@ export function EspaceParent() {
         </h1>
       </div>
 
-      <ProchainCours cours={cours} enseignants={enseignants} />
+      <ListeAnnonces annonces={annonces} />
+
+      <ProchainCours cours={mesCours} enseignants={enseignants} />
 
       <section>
         <h2 className="mb-3 font-display text-[15px] font-semibold">{titreEnfants}</h2>
@@ -138,7 +170,7 @@ export function EspaceParent() {
         {messageAucunEnfant}
       </section>
 
-      <EmploiDuTemps cours={cours} enseignants={enseignants} />
+      <EmploiDuTemps cours={tousLesCours} enseignants={enseignants} enseignements={enseignements} mesCoursIds={mesCoursIds} libelleMesCours="Cours de mes enfants" />
     </div>
   );
 }

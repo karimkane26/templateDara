@@ -6,9 +6,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { CLASSES, type Cours, type Enseignant } from "@/lib/data";
+import { CLASSES, type Cours, type Enseignant, type Enseignement } from "@/lib/data";
 import { JOURS, NOMS_DES_JOURS, attenteLisible, comparerCours, estEnCours, heureLisible, minutesAvantLeCours, prochainCours } from "@/lib/horaires";
-import { trouverEnseignant } from "@/lib/stockage";
+import { trouverEnseignant, trouverEnseignement } from "@/lib/stockage";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Icon } from "./Icon";
 
 /* ---------- Petites fonctions ---------- */
@@ -136,6 +137,7 @@ export function ProchainCours(props: ProchainCoursProps) {
   );
 }
 
+
 /* ============================================================
  * Emploi du temps de la semaine
  * ============================================================ */
@@ -143,16 +145,36 @@ export function ProchainCours(props: ProchainCoursProps) {
 interface EmploiDuTempsProps {
   cours: Cours[];
   enseignants: Enseignant[];
+  enseignements?: Enseignement[]; // pour afficher la matière de chaque cours
+  onModifier?: (cours: Cours) => void; // seulement pour l'administrateur
   onSupprimer?: (coursId: string) => void; // seulement pour l'administrateur
+  /**
+   * Ids des cours qui concernent la personne connectée.
+   * Si on le donne, un bouton permet de choisir entre "Mes cours" et "Tous les cours".
+   * Tous les cours restent visibles par tout le monde.
+   */
+  mesCoursIds?: string[];
+  libelleMesCours?: string; // ex. "Mes cours" ou "Cours de mes enfants"
 }
 
 export function EmploiDuTemps(props: EmploiDuTempsProps) {
   const maintenant = useMaintenant();
+  // "tous" = tous les cours de l'école ; "miens" = seulement ceux qui me concernent
+  const [filtre, setFiltre] = useState("tous");
 
-  // On trie les cours : lundi d'abord, puis par heure
+  let enseignements: Enseignement[] = [];
+  if (props.enseignements) {
+    enseignements = props.enseignements;
+  }
+
+  // On garde les cours à afficher, puis on les trie : lundi d'abord, puis par heure
   const coursTries: Cours[] = [];
   for (let i = 0; i < props.cours.length; i++) {
-    coursTries.push(props.cours[i]);
+    const c = props.cours[i];
+    if (filtre === "miens" && props.mesCoursIds && !props.mesCoursIds.includes(c.id)) {
+      continue;
+    }
+    coursTries.push(c);
   }
   coursTries.sort(comparerCours);
 
@@ -176,6 +198,37 @@ export function EmploiDuTemps(props: EmploiDuTempsProps) {
       let badgeDirect = null;
       if (enDirect) {
         badgeDirect = <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-bold text-danger">En direct</span>;
+      }
+
+      // Petite étiquette "Pour moi" sur les cours qui me concernent
+      let badgeMoi = null;
+      if (props.mesCoursIds && props.mesCoursIds.includes(cours.id)) {
+        badgeMoi = <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-bold text-primary">Pour moi</span>;
+      }
+
+      // Nom de la matière, s'il y en a une
+      let texteMatiere = "";
+      const matiere = trouverEnseignement(enseignements, cours.enseignementId);
+      if (matiere !== undefined) {
+        texteMatiere = matiere.nom + " · ";
+      }
+
+      let boutonModifier = null;
+      if (props.onModifier) {
+        const modifier = props.onModifier;
+        const coursAModifier = cours;
+        boutonModifier = (
+          <button
+            type="button"
+            onClick={function () {
+              modifier(coursAModifier);
+            }}
+            aria-label={"Modifier le cours " + cours.titre}
+            className="grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink"
+          >
+            <Icon name="edit" size={16} />
+          </button>
+        );
       }
 
       let boutonSupprimer = null;
@@ -202,15 +255,18 @@ export function EmploiDuTemps(props: EmploiDuTempsProps) {
             {heureLisible(cours.heureDebut)} – {heureLisible(cours.heureFin)}
           </p>
           <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-2 text-sm font-semibold">
+            <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
               {cours.titre}
               {badgeDirect}
+              {badgeMoi}
             </p>
             <p className="text-xs text-muted">
+              {texteMatiere}
               {nomDesEleves(cours.classeId)} · {nomEnseignant(props.enseignants, cours.enseignantId)}
             </p>
           </div>
           <BoutonMeet lien={cours.lienMeet} enDirect={enDirect} />
+          {boutonModifier}
           {boutonSupprimer}
         </li>,
       );
@@ -233,10 +289,34 @@ export function EmploiDuTemps(props: EmploiDuTempsProps) {
     contenu = <p className="px-5 py-10 text-center text-sm text-muted">Aucun cours dans l&apos;emploi du temps.</p>;
   }
 
+  // Les deux boutons "Tous les cours" / "Mes cours" (seulement si on a donné mesCoursIds)
+  let choixFiltre = null;
+  if (props.mesCoursIds) {
+    let libelleMiens = "Mes cours";
+    if (props.libelleMesCours) {
+      libelleMiens = props.libelleMesCours;
+    }
+
+    // Onglets shadcn/ui : Radix gère le clavier (flèches) et l'accessibilité tout seul
+    choixFiltre = (
+      <Tabs value={filtre} onValueChange={setFiltre}>
+        <TabsList aria-label="Cours affichés">
+          <TabsTrigger value="tous" className="px-3 text-xs font-semibold">
+            Tous les cours ({props.cours.length})
+          </TabsTrigger>
+          <TabsTrigger value="miens" className="px-3 text-xs font-semibold">
+            {libelleMiens} ({props.mesCoursIds.length})
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+    );
+  }
+
   return (
     <section className="panel min-w-0 overflow-hidden">
-      <header className="px-5 pt-4 pb-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-3">
         <h2 className="font-display text-[15px] font-semibold">Emploi du temps de la semaine</h2>
+        {choixFiltre}
       </header>
       <div className="border-t border-line">{contenu}</div>
     </section>

@@ -24,18 +24,21 @@ interface LienMenu {
 const MENU_ADMIN: LienMenu[] = [
   { href: "/", label: "Tableau de bord", icon: "dashboard" },
   { href: "/eleves", label: "Élèves", icon: "users" },
-  { href: "/paiements", label: "Paiements", icon: "wallet" },
+  { href: "/finances", label: "Gestion financière", icon: "finance" },
   { href: "/classes", label: "Classes", icon: "book" },
   { href: "/presences", label: "Présences", icon: "calendarCheck" },
   { href: "/enseignants", label: "Enseignants", icon: "teacher" },
+  { href: "/parents", label: "Parents", icon: "family" },
+  { href: "/enseignements", label: "Enseignements", icon: "layers" },
   { href: "/cours", label: "Cours en ligne", icon: "video" },
+  { href: "/annonces", label: "Annonces", icon: "megaphone" },
 ];
 
 const MENU_ENSEIGNANT: LienMenu[] = [{ href: "/espace-enseignant", label: "Mon espace", icon: "home" }];
 
 const MENU_PARENT: LienMenu[] = [{ href: "/espace-parent", label: "Mon espace", icon: "home" }];
 
-// Nombre d'élèves en retard de paiement (affiché en rouge à côté de "Paiements")
+// Nombre d'élèves en retard de paiement (affiché en rouge à côté de "Gestion financière")
 const nombreDeRelances = relances().length;
 
 const LIEN_ACTIF = "bg-primary-soft text-primary";
@@ -114,6 +117,10 @@ export function Shell(props: ShellProps) {
     if (href === "/") {
       return pageActuelle === "/";
     }
+    // La page /paiements fait partie de la Gestion financière
+    if (href === "/finances" && pageActuelle.startsWith("/paiements")) {
+      return true;
+    }
     return pageActuelle.startsWith(href);
   }
 
@@ -132,7 +139,7 @@ export function Shell(props: ShellProps) {
 
     // Pastille rouge avec le nombre de retards, seulement sur "Paiements"
     let pastille = null;
-    if (lien.href === "/paiements" && nombreDeRelances > 0) {
+    if (lien.href === "/finances" && nombreDeRelances > 0) {
       pastille = (
         <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-bold tabular-nums text-danger">
           {nombreDeRelances}

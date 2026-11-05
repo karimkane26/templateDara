@@ -160,6 +160,52 @@ function dessinDeLIcone(nom: string) {
           <path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9" />
         </>
       );
+    case "edit":
+      return (
+        <>
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </>
+      );
+    case "family":
+      return (
+        <>
+          <circle cx="8" cy="6" r="3" />
+          <path d="M3 21v-3a5 5 0 0 1 10 0v3" />
+          <circle cx="17" cy="10" r="2.5" />
+          <path d="M14.5 21v-2a2.5 2.5 0 0 1 5 0v2" />
+        </>
+      );
+    case "layers":
+      return (
+        <>
+          <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+          <path d="m3 13 9 5 9-5" />
+        </>
+      );
+    case "megaphone":
+      return (
+        <>
+          <path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1Z" />
+          <path d="M17 9a4 4 0 0 1 0 6M7 14l1 6h3l-1-5" />
+        </>
+      );
+    case "printer":
+      return (
+        <>
+          <path d="M6 9V3h12v6" />
+          <rect x="3" y="9" width="18" height="8" rx="2" />
+          <path d="M6 14h12v7H6z" />
+        </>
+      );
+    case "finance":
+      return (
+        <>
+          <ellipse cx="12" cy="6" rx="8" ry="3" />
+          <path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" />
+          <path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
+        </>
+      );
     default:
       // Nom inconnu : on n'affiche rien
       return null;

@@ -4,15 +4,17 @@
  * Page Paiements : résumé du mois, formulaire "Enregistrer un paiement",
  * journal des paiements et liste des élèves en retard.
  *
- * Pour l'instant les nouveaux paiements sont gardés en mémoire seulement
- * (ils disparaissent si on recharge la page). Plus tard, il faudra les envoyer
- * à une base de données dans la fonction "enregistrerLePaiement".
+ * Les nouveaux paiements sont enregistrés dans le navigateur (lib/finances.ts).
+ * Plus tard, il faudra les envoyer à une base de données dans "enregistrerLePaiement".
  */
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { CLASSES, ECOLE, ELEVES, PAIEMENTS, type Eleve, type ModePaiement, type Paiement, type StatutPaiement } from "@/lib/data";
+import { ajouterPaiement, lirePaiements } from "@/lib/finances";
+import { nouvelId } from "@/lib/stockage";
 import { dateCourte, fcfa, initiales, moisLong, pourcent } from "@/lib/format";
 import { Icon } from "./Icon";
+import { ListeDeChoix, type OptionDeChoix } from "./ListeDeChoix";
 import { Avatar, ModeLabel, StatutBadge } from "./elements";
 
 const CHAMP = "h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus:border-primary focus:outline-none";
@@ -141,6 +143,7 @@ function comparerParPrenom(a: Eleve, b: Eleve): number {
 interface PaiementsViewProps {
   formulaireOuvert?: boolean;
   ongletInitial?: string; // "journal" ou "retard"
+  onPaiementEnregistre?: () => void; // pour que la page Gestion financière mette son bilan à jour
 }
 
 export function PaiementsView(props: PaiementsViewProps) {
@@ -154,8 +157,12 @@ export function PaiementsView(props: PaiementsViewProps) {
     formulaireDeDepart = true;
   }
 
-  // Liste des paiements (au départ, ceux de lib/data.ts)
+  // Liste des paiements (au départ ceux de lib/data.ts, puis ceux enregistrés dans le navigateur)
   const [paiements, setPaiements] = useState(PAIEMENTS);
+
+  useEffect(function () {
+    setPaiements(lirePaiements());
+  }, []);
   // Onglet affiché : "journal" ou "retard"
   const [onglet, setOnglet] = useState(ongletDeDepart);
   // Filtre du journal : "tous", "Wave", "Orange Money" ou "Espèces"
@@ -223,16 +230,8 @@ export function PaiementsView(props: PaiementsViewProps) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function quandOnChoisitUnEleve(evenement: ChangeEvent<HTMLSelectElement>) {
-    choisirEleve(evenement.target.value);
-  }
-
   function quandOnTapeLeMontant(evenement: ChangeEvent<HTMLInputElement>) {
     setMontant(evenement.target.value);
-  }
-
-  function quandOnChangeLeFiltre(evenement: ChangeEvent<HTMLSelectElement>) {
-    setFiltreMode(evenement.target.value);
   }
 
   function afficherJournal() {
@@ -254,7 +253,7 @@ export function PaiementsView(props: PaiementsViewProps) {
     }
 
     const nouveauPaiement: Paiement = {
-      id: "n" + Date.now(),
+      id: nouvelId("p"),
       eleveId: eleveId,
       mois: ECOLE.moisEnCours,
       date: ECOLE.aujourdhui,
@@ -262,12 +261,12 @@ export function PaiementsView(props: PaiementsViewProps) {
       mode: modeChoisi,
     };
 
-    // Nouvelle liste : le nouveau paiement en premier, puis tous les anciens.
-    const nouvelleListe: Paiement[] = [nouveauPaiement];
-    for (let i = 0; i < paiements.length; i++) {
-      nouvelleListe.push(paiements[i]);
+    // On l'enregistre dans le navigateur, puis on relit la liste (le plus récent en premier).
+    ajouterPaiement(nouveauPaiement);
+    setPaiements(lirePaiements());
+    if (props.onPaiementEnregistre) {
+      props.onPaiementEnregistre();
     }
-    setPaiements(nouvelleListe);
 
     setConfirmation("Paiement enregistré : " + fcfa(valeur) + " pour " + eleveChoisi.prenom + " " + eleveChoisi.nom + ".");
     setFormulaireVisible(false);
@@ -322,14 +321,10 @@ export function PaiementsView(props: PaiementsViewProps) {
     }
     elevesTries.sort(comparerParPrenom);
 
-    const optionsEleves = [];
+    const optionsEleves: OptionDeChoix[] = [];
     for (let i = 0; i < elevesTries.length; i++) {
       const eleve = elevesTries[i];
-      optionsEleves.push(
-        <option key={eleve.id} value={eleve.id}>
-          {eleve.prenom} {eleve.nom} (classe {nomDeLaClasse(eleve.classeId)})
-        </option>,
-      );
+      optionsEleves.push({ valeur: eleve.id, texte: eleve.prenom + " " + eleve.nom + " (classe " + nomDeLaClasse(eleve.classeId) + ")" });
     }
 
     let texteReste = "Mensualité déjà réglée ce mois-ci";
@@ -399,9 +394,7 @@ export function PaiementsView(props: PaiementsViewProps) {
             <label htmlFor="pay-eleve" className="mb-1.5 block text-xs font-medium text-muted">
               Élève
             </label>
-            <select id="pay-eleve" value={eleveId} onChange={quandOnChoisitUnEleve} className={CHAMP}>
-              {optionsEleves}
-            </select>
+            <ListeDeChoix id="pay-eleve" value={eleveId} onChange={choisirEleve} options={optionsEleves} />
             <p className="mt-1.5 text-xs text-muted">{texteReste}</p>
           </div>
           <div>
@@ -460,26 +453,12 @@ export function PaiementsView(props: PaiementsViewProps) {
   // Le filtre par mode n'apparaît que dans l'onglet "Journal"
   let filtre = null;
   if (onglet === "journal") {
-    const optionsModes = [];
+    const optionsModes: OptionDeChoix[] = [{ valeur: "tous", texte: "Tous les modes" }];
     for (let i = 0; i < MODES.length; i++) {
-      optionsModes.push(
-        <option key={MODES[i]} value={MODES[i]}>
-          {MODES[i]}
-        </option>,
-      );
+      optionsModes.push({ valeur: MODES[i], texte: MODES[i] });
     }
 
-    filtre = (
-      <>
-        <label htmlFor="filtre-mode" className="sr-only">
-          Mode de paiement
-        </label>
-        <select id="filtre-mode" value={filtreMode} onChange={quandOnChangeLeFiltre} className="h-9 rounded-lg border border-line bg-surface px-3 text-sm">
-          <option value="tous">Tous les modes</option>
-          {optionsModes}
-        </select>
-      </>
-    );
+    filtre = <ListeDeChoix id="filtre-mode" label="Mode de paiement" value={filtreMode} onChange={setFiltreMode} options={optionsModes} className="w-44" />;
   }
 
   // 5. Le tableau affiché (journal ou retards)

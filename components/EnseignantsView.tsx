@@ -1,22 +1,28 @@
 "use client";
 
 /*
- * Administrateur : liste des enseignants, ajout et suppression.
+ * Administrateur : liste des enseignants, ajout, modification, désactivation et suppression.
  * Chaque enseignant reçoit un identifiant et un mot de passe pour se connecter à son espace.
  */
 
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { CLASSES, COURS, ENSEIGNANTS, type Cours, type Enseignant } from "@/lib/data";
 import { initiales } from "@/lib/format";
-import { ajouterEnseignant, identifiantDejaPris, lireCours, lireEnseignants, supprimerEnseignant } from "@/lib/stockage";
+import { ajouterEnseignant, enseignantActif, identifiantDejaPris, lireCours, lireEnseignants, modifierEnseignant, supprimerEnseignant } from "@/lib/stockage";
 import { Avatar } from "./elements";
 import { Icon } from "./Icon";
+import { ListeDeChoix, type OptionDeChoix } from "./ListeDeChoix";
 import { Modal } from "./Modal";
 
-const CHAMP = "h-10 w-full rounded-md border border-line bg-surface px-3 text-sm focus:border-primary focus:outline-none";
+const OPTIONS_CIVILITE: OptionDeChoix[] = [
+  { valeur: "Oustaz", texte: "Oustaz" },
+  { valeur: "Oustaza", texte: "Oustaza" },
+];
 
 /** ["alif", "ba"] -> "Alif, Ba" */
 function nomsDesClasses(classeIds: string[]): string {
@@ -60,7 +66,10 @@ export function EnseignantsView() {
   const [classeIds, setClasseIds] = useState<string[]>([]);
   const [identifiant, setIdentifiant] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
+  const [actif, setActif] = useState(true);
   const [erreur, setErreur] = useState("");
+  // Id de l'enseignant qu'on modifie, ou "" quand on en ajoute un nouveau
+  const [idEnModification, setIdEnModification] = useState("");
 
   useEffect(function () {
     setEnseignants(lireEnseignants());
@@ -68,6 +77,8 @@ export function EnseignantsView() {
   }, []);
 
   function ouvrirFormulaire() {
+    setIdEnModification("");
+    setActif(true);
     setCivilite("Oustaz");
     setPrenom("");
     setNom("");
@@ -78,6 +89,43 @@ export function EnseignantsView() {
     setErreur("");
     setMessage("");
     setFormulaireOuvert(true);
+  }
+
+  /** Ouvre le formulaire rempli avec les informations de l'enseignant. */
+  function ouvrirModification(enseignant: Enseignant) {
+    setIdEnModification(enseignant.id);
+    setCivilite(enseignant.civilite);
+    setPrenom(enseignant.prenom);
+    setNom(enseignant.nom);
+    setTelephone(enseignant.telephone);
+    setClasseIds(enseignant.classeIds);
+    setIdentifiant(enseignant.identifiant);
+    setMotDePasse(enseignant.motDePasse);
+    setActif(enseignantActif(enseignant));
+    setErreur("");
+    setMessage("");
+    setFormulaireOuvert(true);
+  }
+
+  /** Active ou désactive le compte : un compte désactivé ne peut plus se connecter. */
+  function basculerActif(enseignant: Enseignant) {
+    const nouvelEtat = !enseignantActif(enseignant);
+    modifierEnseignant(enseignant.id, {
+      civilite: enseignant.civilite,
+      prenom: enseignant.prenom,
+      nom: enseignant.nom,
+      telephone: enseignant.telephone,
+      classeIds: enseignant.classeIds,
+      identifiant: enseignant.identifiant,
+      motDePasse: enseignant.motDePasse,
+      actif: nouvelEtat,
+    });
+    setEnseignants(lireEnseignants());
+    if (nouvelEtat) {
+      setMessage("Le compte de " + enseignant.prenom + " " + enseignant.nom + " est réactivé.");
+    } else {
+      setMessage("Le compte de " + enseignant.prenom + " " + enseignant.nom + " est désactivé : il ne peut plus se connecter.");
+    }
   }
 
   function fermerFormulaire() {
@@ -116,7 +164,7 @@ export function EnseignantsView() {
       setErreur("L'identifiant ne doit pas contenir d'espace.");
       return;
     }
-    if (identifiantDejaPris(identifiant.trim())) {
+    if (identifiantDejaPris(identifiant.trim(), idEnModification)) {
       setErreur("Cet identifiant est déjà utilisé. Choisissez-en un autre.");
       return;
     }
@@ -125,7 +173,7 @@ export function EnseignantsView() {
       return;
     }
 
-    ajouterEnseignant({
+    const infos = {
       civilite: civilite,
       prenom: prenom.trim(),
       nom: nom.trim(),
@@ -133,13 +181,21 @@ export function EnseignantsView() {
       classeIds: classeIds,
       identifiant: identifiant.trim(),
       motDePasse: motDePasse,
-    });
+      actif: actif,
+    };
+
+    if (idEnModification === "") {
+      ajouterEnseignant(infos);
+      setMessage(
+        civilite + " " + infos.prenom + " " + infos.nom + " a été ajouté. Identifiant : " + infos.identifiant + ", mot de passe : " + motDePasse + ".",
+      );
+    } else {
+      modifierEnseignant(idEnModification, infos);
+      setMessage("Les informations de " + civilite + " " + infos.prenom + " " + infos.nom + " ont été modifiées.");
+    }
 
     setEnseignants(lireEnseignants());
     setFormulaireOuvert(false);
-    setMessage(
-      civilite + " " + prenom.trim() + " " + nom.trim() + " a été ajouté. Identifiant : " + identifiant.trim() + ", mot de passe : " + motDePasse + ".",
-    );
   }
 
   function supprimer(enseignant: Enseignant) {
@@ -164,6 +220,14 @@ export function EnseignantsView() {
       sexe = "F";
     }
 
+    // Pastille "Actif" (verte) ou "Désactivé" (rouge)
+    let texteEtat = "Actif";
+    let styleEtat = "bg-primary-soft text-primary";
+    if (!enseignantActif(e)) {
+      texteEtat = "Désactivé";
+      styleEtat = "bg-danger-soft text-danger";
+    }
+
     lignes.push(
       <tr key={e.id} className="hover:bg-surface-2/60">
         <td className="px-5 py-3">
@@ -180,7 +244,29 @@ export function EnseignantsView() {
         <td className="px-3 py-3">{nomsDesClasses(e.classeIds)}</td>
         <td className="px-3 py-3 text-right tabular-nums">{nombreDeCours(cours, e.id)}</td>
         <td className="px-3 py-3 font-mono text-xs">{e.identifiant}</td>
-        <td className="px-5 py-3 text-right">
+        <td className="px-3 py-3">
+          <button
+            type="button"
+            onClick={function () {
+              basculerActif(e);
+            }}
+            title="Cliquer pour activer / désactiver le compte"
+            className={"rounded-full px-2.5 py-0.5 text-xs font-semibold " + styleEtat}
+          >
+            {texteEtat}
+          </button>
+        </td>
+        <td className="px-5 py-3 text-right whitespace-nowrap">
+          <button
+            type="button"
+            onClick={function () {
+              ouvrirModification(e);
+            }}
+            aria-label={"Modifier " + e.prenom + " " + e.nom}
+            className="inline-grid size-9 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink"
+          >
+            <Icon name="edit" size={16} />
+          </button>
           <button
             type="button"
             onClick={function () {
@@ -207,17 +293,18 @@ export function EnseignantsView() {
     const classe = CLASSES[i];
     const id = classe.id;
     casesClasses.push(
-      <label key={id} className="flex cursor-pointer items-center gap-2 rounded-md border border-line px-3 py-2 text-sm">
-        <input
-          type="checkbox"
+      <div key={id} className="flex items-center gap-2 rounded-md border border-line px-3 py-2">
+        <Checkbox
+          id={"ens-classe-" + id}
           checked={classeIds.includes(id)}
-          onChange={function () {
+          onCheckedChange={function () {
             basculerClasse(id);
           }}
-          className="accent-[var(--primary)]"
         />
-        {classe.nom}
-      </label>,
+        <Label htmlFor={"ens-classe-" + id} className="flex-1 cursor-pointer text-sm font-normal">
+          {classe.nom}
+        </Label>
+      </div>,
     );
   }
 
@@ -236,8 +323,12 @@ export function EnseignantsView() {
     messageErreur = <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{erreur}</p>;
   }
 
-  function quandOnChoisitLaCivilite(evenement: ChangeEvent<HTMLSelectElement>) {
-    setCivilite(evenement.target.value);
+  // Titre de la fenêtre et texte du bouton : ajout ou modification
+  let titreFenetre = "Ajouter un enseignant";
+  let texteBouton = "Ajouter";
+  if (idEnModification !== "") {
+    titreFenetre = "Modifier l'enseignant";
+    texteBouton = "Enregistrer";
   }
 
   return (
@@ -260,6 +351,7 @@ export function EnseignantsView() {
                 <th className="px-3 py-3 font-medium">Classes</th>
                 <th className="px-3 py-3 text-right font-medium">Cours en ligne</th>
                 <th className="px-3 py-3 font-medium">Identifiant</th>
+                <th className="px-3 py-3 font-medium">Compte</th>
                 <th className="px-5 py-3 text-right font-medium">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -273,7 +365,7 @@ export function EnseignantsView() {
 
       <Modal
         ouvert={formulaireOuvert}
-        titre="Ajouter un enseignant"
+        titre={titreFenetre}
         onFermer={fermerFormulaire}
         pied={
           <>
@@ -281,7 +373,7 @@ export function EnseignantsView() {
               Annuler
             </Button>
             <Button type="submit" form="form-enseignant" size="lg">
-              Ajouter
+              {texteBouton}
             </Button>
           </>
         }
@@ -289,10 +381,7 @@ export function EnseignantsView() {
         <form id="form-enseignant" onSubmit={quandOnValide} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Label htmlFor="ens-civilite" className="mb-1.5 text-xs font-semibold text-muted">Civilité</Label>
-            <select id="ens-civilite" value={civilite} onChange={quandOnChoisitLaCivilite} className={CHAMP}>
-              <option value="Oustaz">Oustaz</option>
-              <option value="Oustaza">Oustaza</option>
-            </select>
+            <ListeDeChoix id="ens-civilite" value={civilite} onChange={setCivilite} options={OPTIONS_CIVILITE} />
           </div>
           <div>
             <Label htmlFor="ens-prenom" className="mb-1.5 text-xs font-semibold text-muted">Prénom</Label>
@@ -317,6 +406,12 @@ export function EnseignantsView() {
           <div>
             <Label htmlFor="ens-mdp" className="mb-1.5 text-xs font-semibold text-muted">Mot de passe</Label>
             <Input id="ens-mdp" value={motDePasse} onChange={function (ev) { setMotDePasse(ev.target.value); }} autoComplete="off" className="h-10 bg-surface" />
+          </div>
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <Switch id="ens-actif" checked={actif} onCheckedChange={setActif} />
+            <Label htmlFor="ens-actif" className="text-sm font-normal">
+              Compte actif (peut se connecter à l&apos;espace enseignant)
+            </Label>
           </div>
           <div className="sm:col-span-2">{messageErreur}</div>
         </form>

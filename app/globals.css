@@ -162,3 +162,35 @@
     }
   }
 }
+
+/* ------------------------------------------------------------
+ * Impression des reçus, factures et fiches de paie
+ * (components/finances/DocumentFinancier.tsx)
+ * Quand on imprime, on cache toute la page sauf la zone ".zone-impression".
+ * ------------------------------------------------------------ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .zone-impression,
+  .zone-impression * {
+    visibility: visible;
+  }
+  /* La fenêtre qui contient le document : on la remet en haut de la feuille, sans ombre ni ascenseur */
+  [data-slot="dialog-content"] {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    transform: none !important;
+    max-height: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  [data-slot="dialog-content"] > div {
+    overflow: visible !important;
+  }
+  .zone-impression {
+    color: #000;
+  }
+}

@@ -2,33 +2,37 @@
 
 /*
  * Administrateur : gestion des cours en ligne (Google Meet).
- * Chaque cours revient chaque semaine. Il est visible par les parents des élèves de la classe
- * (ou par tout le monde si on choisit "Toutes les classes") et par l'enseignant.
+ * Chaque cours revient chaque semaine. Tout le monde (enseignants et parents) voit l'emploi du temps
+ * complet ; chacun peut aussi n'afficher que les cours qui le concernent.
  */
 
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CLASSES, COURS, ENSEIGNANTS, type Cours, type Enseignant, type JourSemaine } from "@/lib/data";
+import { CLASSES, COURS, ENSEIGNANTS, ENSEIGNEMENTS, type Cours, type Enseignant, type Enseignement, type JourSemaine } from "@/lib/data";
 import { JOURS, NOMS_DES_JOURS, enMinutes } from "@/lib/horaires";
-import { ajouterCours, estUnLienMeet, lireCours, lireEnseignants, supprimerCours } from "@/lib/stockage";
+import { ajouterCours, estUnLienMeet, lireCours, lireEnseignants, lireEnseignements, modifierCours, supprimerCours } from "@/lib/stockage";
 import { EmploiDuTemps } from "./EmploiDuTemps";
 import { Icon } from "./Icon";
+import { ListeDeChoix, type OptionDeChoix } from "./ListeDeChoix";
 import { Modal } from "./Modal";
 
-const CHAMP = "h-10 w-full rounded-md border border-line bg-surface px-3 text-sm focus:border-primary focus:outline-none";
 
 export function CoursView() {
   const [cours, setCours] = useState<Cours[]>(COURS);
   const [enseignants, setEnseignants] = useState<Enseignant[]>(ENSEIGNANTS);
+  const [enseignements, setEnseignements] = useState<Enseignement[]>(ENSEIGNEMENTS);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [message, setMessage] = useState("");
+  // Id du cours qu'on modifie, ou "" quand on en ajoute un nouveau
+  const [idEnModification, setIdEnModification] = useState("");
 
   // Champs du formulaire
   const [titre, setTitre] = useState("");
   const [classeId, setClasseId] = useState("toutes");
   const [enseignantId, setEnseignantId] = useState("");
+  const [enseignementId, setEnseignementId] = useState("");
   const [jour, setJour] = useState("1");
   const [heureDebut, setHeureDebut] = useState("09:00");
   const [heureFin, setHeureFin] = useState("10:00");
@@ -39,9 +43,11 @@ export function CoursView() {
   useEffect(function () {
     setCours(lireCours());
     setEnseignants(lireEnseignants());
+    setEnseignements(lireEnseignements());
   }, []);
 
   function ouvrirFormulaire() {
+    setIdEnModification("");
     setTitre("");
     setClasseId("toutes");
     if (enseignants.length > 0) {
@@ -49,10 +55,31 @@ export function CoursView() {
     } else {
       setEnseignantId("");
     }
+    setEnseignementId("");
     setJour("1");
     setHeureDebut("09:00");
     setHeureFin("10:00");
     setLienMeet("");
+    setErreur("");
+    setMessage("");
+    setFormulaireOuvert(true);
+  }
+
+  /** Ouvre le formulaire rempli avec les informations du cours, pour le modifier. */
+  function ouvrirModification(cours: Cours) {
+    setIdEnModification(cours.id);
+    setTitre(cours.titre);
+    setClasseId(cours.classeId);
+    setEnseignantId(cours.enseignantId);
+    if (cours.enseignementId) {
+      setEnseignementId(cours.enseignementId);
+    } else {
+      setEnseignementId("");
+    }
+    setJour(String(cours.jour));
+    setHeureDebut(cours.heureDebut);
+    setHeureFin(cours.heureFin);
+    setLienMeet(cours.lienMeet);
     setErreur("");
     setMessage("");
     setFormulaireOuvert(true);
@@ -84,19 +111,27 @@ export function CoursView() {
       return;
     }
 
-    ajouterCours({
+    const infos = {
       titre: titre.trim(),
       classeId: classeId,
       enseignantId: enseignantId,
+      enseignementId: enseignementId,
       jour: Number(jour) as JourSemaine,
       heureDebut: heureDebut,
       heureFin: heureFin,
       lienMeet: lien,
-    });
+    };
+
+    if (idEnModification === "") {
+      ajouterCours(infos);
+      setMessage("Cours « " + infos.titre + " » ajouté. Il est maintenant visible par tous les enseignants et les parents.");
+    } else {
+      modifierCours(idEnModification, infos);
+      setMessage("Cours « " + infos.titre + " » modifié.");
+    }
 
     setCours(lireCours());
     setFormulaireOuvert(false);
-    setMessage("Cours « " + titre.trim() + " » ajouté. Il est maintenant visible par les élèves concernés.");
   }
 
   function supprimer(id: string) {
@@ -110,32 +145,33 @@ export function CoursView() {
 
   /* ---------- Listes pour les menus déroulants ---------- */
 
-  const optionsClasses = [<option key="toutes" value="toutes">Toutes les classes</option>];
+  const optionsClasses: OptionDeChoix[] = [{ valeur: "toutes", texte: "Toutes les classes" }];
   for (let i = 0; i < CLASSES.length; i++) {
-    optionsClasses.push(
-      <option key={CLASSES[i].id} value={CLASSES[i].id}>
-        Classe {CLASSES[i].nom}
-      </option>,
-    );
+    optionsClasses.push({ valeur: CLASSES[i].id, texte: "Classe " + CLASSES[i].nom });
   }
 
-  const optionsEnseignants = [];
+  const optionsEnseignants: OptionDeChoix[] = [];
   for (let i = 0; i < enseignants.length; i++) {
     const e = enseignants[i];
-    optionsEnseignants.push(
-      <option key={e.id} value={e.id}>
-        {e.civilite} {e.prenom} {e.nom}
-      </option>,
-    );
+    optionsEnseignants.push({ valeur: e.id, texte: e.civilite + " " + e.prenom + " " + e.nom });
   }
 
-  const optionsJours = [];
+  const optionsEnseignements: OptionDeChoix[] = [{ valeur: "", texte: "Aucune matière" }];
+  for (let i = 0; i < enseignements.length; i++) {
+    optionsEnseignements.push({ valeur: enseignements[i].id, texte: enseignements[i].nom });
+  }
+
+  // Titre de la fenêtre et texte du bouton : ajout ou modification
+  let titreFenetre = "Ajouter un cours en ligne";
+  let texteBouton = "Ajouter le cours";
+  if (idEnModification !== "") {
+    titreFenetre = "Modifier le cours";
+    texteBouton = "Enregistrer";
+  }
+
+  const optionsJours: OptionDeChoix[] = [];
   for (let i = 0; i < JOURS.length; i++) {
-    optionsJours.push(
-      <option key={JOURS[i]} value={String(JOURS[i])}>
-        {NOMS_DES_JOURS[JOURS[i]]}
-      </option>,
-    );
+    optionsJours.push({ valeur: String(JOURS[i]), texte: NOMS_DES_JOURS[JOURS[i]] });
   }
 
   /* ---------- Morceaux d'affichage ---------- */
@@ -161,18 +197,26 @@ export function CoursView() {
    * et efface le message d'erreur. Ça évite d'écrire 7 fonctions presque identiques.
    */
   function changer(setter: (valeur: string) => void) {
-    return function (evenement: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+    return function (evenement: ChangeEvent<HTMLInputElement>) {
       setter(evenement.target.value);
       setErreur("");
     };
   }
 
+
+  /** Pareil pour une liste déroulante : la valeur choisie arrive directement (pas un événement). */
+  function choisir(setter: (valeur: string) => void) {
+    return function (valeur: string) {
+      setter(valeur);
+      setErreur("");
+    };
+  }
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-sm text-muted">
-          Créez la réunion sur <span className="font-medium text-ink">meet.google.com</span>, copiez son lien, puis ajoutez le cours ici. Les parents et
-          l&apos;enseignant le verront dans leur espace.
+          Créez la réunion sur <span className="font-medium text-ink">meet.google.com</span>, copiez son lien, puis ajoutez le cours ici. Tous les
+          enseignants et tous les parents le verront dans leur espace.
         </p>
         <Button type="button" size="lg" onClick={ouvrirFormulaire}>
           <Icon name="plus" />
@@ -182,11 +226,11 @@ export function CoursView() {
 
       {bandeau}
 
-      <EmploiDuTemps cours={cours} enseignants={enseignants} onSupprimer={supprimer} />
+      <EmploiDuTemps cours={cours} enseignants={enseignants} enseignements={enseignements} onModifier={ouvrirModification} onSupprimer={supprimer} />
 
       <Modal
         ouvert={formulaireOuvert}
-        titre="Ajouter un cours en ligne"
+        titre={titreFenetre}
         onFermer={fermerFormulaire}
         pied={
           <>
@@ -194,7 +238,7 @@ export function CoursView() {
               Annuler
             </Button>
             <Button type="submit" form="form-cours" size="lg">
-              Ajouter le cours
+              {texteBouton}
             </Button>
           </>
         }
@@ -206,21 +250,19 @@ export function CoursView() {
           </div>
           <div>
             <Label htmlFor="cours-classe" className="mb-1.5 text-xs font-semibold text-muted">Pour qui ?</Label>
-            <select id="cours-classe" value={classeId} onChange={changer(setClasseId)} className={CHAMP}>
-              {optionsClasses}
-            </select>
+            <ListeDeChoix id="cours-classe" value={classeId} onChange={choisir(setClasseId)} options={optionsClasses} />
           </div>
           <div>
             <Label htmlFor="cours-enseignant" className="mb-1.5 text-xs font-semibold text-muted">Enseignant</Label>
-            <select id="cours-enseignant" value={enseignantId} onChange={changer(setEnseignantId)} className={CHAMP}>
-              {optionsEnseignants}
-            </select>
+            <ListeDeChoix id="cours-enseignant" value={enseignantId} onChange={choisir(setEnseignantId)} options={optionsEnseignants} />
           </div>
-          <div className="sm:col-span-2">
+          <div>
+            <Label htmlFor="cours-matiere" className="mb-1.5 text-xs font-semibold text-muted">Enseignement (matière)</Label>
+            <ListeDeChoix id="cours-matiere" value={enseignementId} onChange={choisir(setEnseignementId)} options={optionsEnseignements} />
+          </div>
+          <div>
             <Label htmlFor="cours-jour" className="mb-1.5 text-xs font-semibold text-muted">Jour (chaque semaine)</Label>
-            <select id="cours-jour" value={jour} onChange={changer(setJour)} className={CHAMP}>
-              {optionsJours}
-            </select>
+            <ListeDeChoix id="cours-jour" value={jour} onChange={choisir(setJour)} options={optionsJours} />
           </div>
           <div>
             <Label htmlFor="cours-debut" className="mb-1.5 text-xs font-semibold text-muted">Début</Label>

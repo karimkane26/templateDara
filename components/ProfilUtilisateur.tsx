@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UTILISATEUR } from "@/lib/data";
-import { nomDuRole, seDeconnecter, type Session } from "@/lib/stockage";
+import { changerMotDePasse, nomDuRole, seDeconnecter, type Session } from "@/lib/stockage";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 
@@ -357,7 +357,7 @@ export function ProfilUtilisateur(props: ProfilUtilisateurProps) {
 
       <FenetreProfil ouvert={fenetre === "profil"} profil={profil} onFermer={fermerFenetre} onEnregistrer={enregistrerProfil} />
       <FenetrePhoto ouvert={fenetre === "photo"} photo={photo} profil={profil} onFermer={fermerFenetre} onEnregistrer={enregistrerPhoto} />
-      <FenetreMotDePasse ouvert={fenetre === "motDePasse"} onFermer={fermerFenetre} onValider={motDePasseModifie} />
+      <FenetreMotDePasse ouvert={fenetre === "motDePasse"} session={session} onFermer={fermerFenetre} onValider={motDePasseModifie} />
 
       <Modal
         ouvert={fenetre === "deconnexion"}
@@ -597,6 +597,7 @@ function FenetrePhoto(props: FenetrePhotoProps) {
 
 interface FenetreMotDePasseProps {
   ouvert: boolean;
+  session: Session; // le compte dont on change le mot de passe
   onFermer: () => void;
   onValider: () => void;
 }
@@ -605,6 +606,7 @@ function FenetreMotDePasse(props: FenetreMotDePasseProps) {
   const [actuel, setActuel] = useState("");
   const [nouveau, setNouveau] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [erreur, setErreur] = useState("");
 
   const ouvert = props.ouvert;
 
@@ -615,6 +617,7 @@ function FenetreMotDePasse(props: FenetreMotDePasseProps) {
         setActuel("");
         setNouveau("");
         setConfirmation("");
+        setErreur("");
       }
     },
     [ouvert],
@@ -638,9 +641,21 @@ function FenetreMotDePasse(props: FenetreMotDePasseProps) {
 
   function quandOnValide(evenement: FormEvent) {
     evenement.preventDefault();
-    if (formulaireValide) {
-      props.onValider();
+    if (!formulaireValide) {
+      return;
     }
+    // On vérifie l'ancien mot de passe et on enregistre le nouveau
+    const probleme = changerMotDePasse(props.session, actuel, nouveau);
+    if (probleme !== "") {
+      setErreur(probleme);
+      return;
+    }
+    props.onValider();
+  }
+
+  let messageErreur = null;
+  if (erreur !== "") {
+    messageErreur = <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{erreur}</p>;
   }
 
   return (
@@ -660,9 +675,10 @@ function FenetreMotDePasse(props: FenetreMotDePasseProps) {
       }
     >
       <form id="form-mdp" onSubmit={quandOnValide} className="grid gap-4">
-        <Champ label="Mot de passe actuel" name="actuel" type="password" value={actuel} onChange={setActuel} autoComplete="current-password" />
+        <Champ label="Mot de passe actuel" name="actuel" type="password" value={actuel} onChange={function (valeur) { setActuel(valeur); setErreur(""); }} autoComplete="current-password" />
         <Champ label="Nouveau mot de passe" name="nouveau" type="password" value={nouveau} onChange={setNouveau} autoComplete="new-password" aide={aideNouveau} />
         <Champ label="Confirmer le mot de passe" name="confirmation" type="password" value={confirmation} onChange={setConfirmation} autoComplete="new-password" aide={aideConfirmation} />
+        {messageErreur}
       </form>
     </Modal>
   );
