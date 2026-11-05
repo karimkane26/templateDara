@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/*
+  Daara — gestion d'école coranique
+  Mise en page : barre latérale fixe + grille de panneaux ; la collecte du mois est l'élément fort.
+  Palette : vert profond (encre des planchettes), ocre (bois de l'alluha), papier légèrement verdi.
+*/
+:root {
+  --bg: #f2f5f1;
+  --surface: #ffffff;
+  --surface-2: #e8eee8;
+  --ink: #13211a;
+  --muted: #5a6b61;
+  --line: #d6dfd8;
+  --primary: #0e6b4e;
+  --primary-ink: #ffffff;
+  --primary-soft: #dcefe5;
+  --ochre: #a86b12;
+  --ochre-soft: #f5e8d0;
+  --danger: #b42318;
+  --danger-soft: #fbe3df;
+  --wave: #1677b8;
+  --orange-money: #c45a06;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1310;
+    --surface: #131d18;
+    --surface-2: #1a2721;
+    --ink: #e5eee8;
+    --muted: #93a69b;
+    --line: #25352d;
+    --primary: #42b98b;
+    --primary-ink: #052419;
+    --primary-soft: #16382b;
+    --ochre: #e2a74c;
+    --ochre-soft: #3a2b13;
+    --danger: #f07a6c;
+    --danger-soft: #3c1c18;
+    --wave: #62b8ee;
+    --orange-money: #f39445;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0c1310;
+  --surface: #131d18;
+  --surface-2: #1a2721;
+  --ink: #e5eee8;
+  --muted: #93a69b;
+  --line: #25352d;
+  --primary: #42b98b;
+  --primary-ink: #052419;
+  --primary-soft: #16382b;
+  --ochre: #e2a74c;
+  --ochre-soft: #3a2b13;
+  --danger: #f07a6c;
+  --danger-soft: #3c1c18;
+  --wave: #62b8ee;
+  --orange-money: #f39445;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
+  --color-primary-soft: var(--primary-soft);
+  --color-ochre: var(--ochre);
+  --color-ochre-soft: var(--ochre-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-wave: var(--wave);
+  --color-orange-money: var(--orange-money);
+
+  --font-display: var(--font-bricolage, "Bricolage Grotesque"), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-jakarta, "Plus Jakarta Sans"), ui-sans-serif, system-ui, sans-serif;
+}
+
+@utility panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+@layer base {
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
+  }
+}
